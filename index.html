@@ -68,6 +68,13 @@
                 <span class="material-icons-round">volume_up</span>
             </div>
 
+            <!-- Extra Actions -->
+            <div class="extra-actions-full" style="display: flex; justify-content: center; margin: 10px 0; gap: 20px;">
+                <button class="btn-icon-full" id="share-btn" title="แชร์">
+                    <span class="material-icons-round" style="font-size: 24px;">ios_share</span>
+                </button>
+            </div>
+
             <!-- Queue / Up Next -->
             <div class="queue-section">
                 <div class="queue-header">
@@ -187,6 +194,30 @@
         </button>
     </nav>
 
+    <!-- Share Modal -->
+    <div id="share-modal" class="share-modal">
+        <div class="share-modal-content">
+            <button class="share-modal-close" id="close-share-modal"><span
+                    class="material-icons-round">close</span></button>
+            <div class="share-image-container">
+                <img id="share-cover" src="" alt="Cover Art">
+            </div>
+            <h3 id="share-title">Song Title</h3>
+            <p id="share-artist">PeephatZ Studio</p>
+
+            <div class="share-link-box">
+                <input type="text" id="share-url" readonly>
+                <button id="copy-link-btn" class="secondary-btn"><span
+                        class="material-icons-round">content_copy</span></button>
+            </div>
+
+            <button id="system-share-btn" class="primary-btn">
+                <span class="material-icons-round">ios_share</span> Share via System
+            </button>
+        </div>
+    </div>
+
+    <div id="toast-container" class="toast-container"></div>
     <script src="app.js"></script>
 </body>
 

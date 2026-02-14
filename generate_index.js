@@ -13,10 +13,6 @@ function getFiles(dir, fileList = []) {
 
     files.forEach(file => {
         const filePath = path.join(dir, file);
-        // Exclude specific file requested by user
-        if (file.includes('Aquanaut Band - คนน่ารัก')) {
-            return;
-        }
 
         if (fs.statSync(filePath).isDirectory()) {
             getFiles(filePath, fileList);
@@ -48,6 +44,11 @@ function parseMetadata(filePath) {
         .replace(/\.(mp3|mp4|m4a|wav)$/i, '')
         .replace(/\((Music Video|Audio|Official Video|Video|Official Audio)\)/gi, '')
         .trim();
+
+    // Special case: User wants [2022] in the title for this track
+    if (fileName.includes('Aquanaut Band - คนน่ารัก')) {
+        title = 'Aquanaut Band - คนน่ารัก “ไม่อยากแค่จะมอง” [2022]';
+    }
 
     return {
         title: title,

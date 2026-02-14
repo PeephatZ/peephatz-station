@@ -89,11 +89,43 @@ async function init() {
         // Initial Render
         renderPlaylist(currentPlaylist);
 
-        // Auto-load first track (paused)
-        if (playlists[currentPlaylist].length > 0) {
-            preloadTrack(0, currentPlaylist);
-            renderQueue();
+        // Deep Link Logic
+        const urlParams = new URLSearchParams(window.location.search);
+        const sharedTitle = urlParams.get('title');
+        let initialTrackLoaded = false;
+
+        if (sharedTitle) {
+            // Find track across all playlists
+            for (const key of ['timeline', 'all', 'bonus']) {
+                const idx = playlists[key].findIndex(t => t.title === sharedTitle);
+                if (idx !== -1) {
+                    currentPlaylist = key;
+                    currentTrackIndex = idx;
+                    // Update Nav UI
+                    updateNavState();
+                    renderPlaylist(currentPlaylist);
+                    // Load found track (autoplay might be blocked, but we load it)
+                    loadTrack(currentTrackIndex, currentPlaylist, false);
+                    initialTrackLoaded = true;
+                    // Open full screen player for visibility
+                    openFullScreenPlayer();
+                    break;
+                }
+            }
         }
+
+        // Auto-load first track (paused) if no deep link found or deep link failed
+        if (!initialTrackLoaded && playlists[currentPlaylist].length > 0) {
+            preloadTrack(0, currentPlaylist);
+            // Ensure URL is clean or reflects first track? 
+            // Better to keep clean until user interaction or just default.
+            // Let's set it to the first track's title so the link is always shareable.
+            const firstTrack = playlists[currentPlaylist][0];
+            const newUrl = `${window.location.pathname}?title=${encodeURIComponent(firstTrack.title)}`;
+            history.replaceState(null, '', newUrl);
+        }
+
+        renderQueue();
 
         setupEventListeners();
         setupAudioContext();
@@ -574,6 +606,12 @@ async function loadTrack(index, playlistKey, autoPlay = false) {
         }
     }
     updatePlayButton();
+    updateMediaSession(track);
+
+    // Update Browser URL for Deep Linking
+    const newUrl = `${window.location.pathname}?title=${encodeURIComponent(track.title)}`;
+    history.replaceState(null, '', newUrl);
+
     renderQueue();
     requestAnimationFrame(() => applyFooterTitleMarquee());
 }
@@ -798,105 +836,236 @@ function setupEventListeners() {
     if (fsProgressBar) {
         fsProgressBar.addEventListener('input', (e) => {
             const activeMedia = currentAudioObj || videoElement;
-            updateRangeBackground(fsProgressBar);
             if (activeMedia && activeMedia.duration) {
-                const time = (e.target.value / 100) * activeMedia.duration;
-                activeMedia.currentTime = time;
+                const seekTime = (e.target.value / 100) * activeMedia.duration;
+                activeMedia.currentTime = seekTime;
+                updateRangeBackground(e.target);
             }
         });
     }
 
-    // FS Volume
-    if (fsVolumeBar) {
-        fsVolumeBar.addEventListener('input', (e) => {
-            const val = e.target.value / 100;
-            updateRangeBackground(fsVolumeBar);
-            // Sync Mini Volume
-            volumeBar.value = e.target.value;
-            updateRangeBackground(volumeBar);
-            if (gainNode) gainNode.gain.setValueAtTime(val, audioContext.currentTime);
-        });
+    // Share Button
+    const shareBtn = document.getElementById('share-btn');
+    if (shareBtn) {
+        shareBtn.addEventListener('click', shareCurrentTrack);
     }
 
-    // Mode Switchers
-    if (modeAudioBtn) modeAudioBtn.addEventListener('click', () => toggleMode('audio'));
-    if (modeVideoBtn) modeVideoBtn.addEventListener('click', () => toggleMode('video'));
+    // Media Session Action Handlers
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.setActionHandler('play', () => togglePlay());
+        navigator.mediaSession.setActionHandler('pause', () => togglePlay());
+        navigator.mediaSession.setActionHandler('previoustrack', () => prevTrack());
+        navigator.mediaSession.setActionHandler('nexttrack', () => nextTrack());
+        navigator.mediaSession.setActionHandler('seekto', (details) => {
+            const activeMedia = currentAudioObj || videoElement;
+            if (activeMedia && details.seekTime !== undefined) {
+                activeMedia.currentTime = details.seekTime;
+            }
+        });
+    }
+}
 
-    // Media Controls
-    playBtn.addEventListener('click', togglePlay);
-    nextBtn.addEventListener('click', nextTrack);
-    prevBtn.addEventListener('click', prevTrack);
+// Media Session API Update
+function updateMediaSession(track) {
+    if ('mediaSession' in navigator) {
+        const coverPath = track.cover ? track.cover.replace(/\\/g, '/') : 'cover.jpg';
 
-    // Video Events
-    videoElement.addEventListener('ended', nextTrack);
-    videoElement.addEventListener('timeupdate', () => updateProgress(videoElement));
-    videoElement.addEventListener('play', () => { isPlaying = true; updatePlayButton(); });
-    videoElement.addEventListener('pause', () => { isPlaying = false; updatePlayButton(); });
-    videoElement.addEventListener('dblclick', () => {
-        if (videoElement.requestFullscreen) videoElement.requestFullscreen();
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: track.title,
+            artist: `PeephatZ Studio • ${track.year || ''}`,
+            artwork: [
+                { src: coverPath, sizes: '512x512', type: 'image/jpeg' },
+                { src: coverPath, sizes: '96x96', type: 'image/jpeg' }
+            ]
+        });
+    }
+}
+
+// Share Modal Logic
+const shareModal = document.getElementById('share-modal');
+const closeShareModalBtn = document.getElementById('close-share-modal');
+const copyLinkBtn = document.getElementById('copy-link-btn');
+const systemShareBtn = document.getElementById('system-share-btn');
+
+if (closeShareModalBtn) {
+    closeShareModalBtn.addEventListener('click', () => {
+        shareModal.classList.remove('active');
     });
+}
 
-    // Seek
-    progressBar.addEventListener('input', (e) => {
-        const activeMedia = currentAudioObj || videoElement;
-        updateRangeBackground(progressBar);
-        if (activeMedia && activeMedia.duration) {
-            const time = (e.target.value / 100) * activeMedia.duration;
-            activeMedia.currentTime = time;
+function shareCurrentTrack() {
+    const track = playlists[currentPlaylist][currentTrackIndex];
+    if (!track) return;
+
+    // Populate Modal
+    const coverPath = track.cover ? track.cover.replace(/\\/g, '/') : 'cover.jpg';
+    document.getElementById('share-cover').src = coverPath;
+    document.getElementById('share-title').textContent = track.title;
+    document.getElementById('share-artist').textContent = `PeephatZ Studio • ${track.year || ''}`;
+
+    // Create Share Data
+    const shareUrl = window.location.href; // Deep link already set in URL
+    document.getElementById('share-url').value = shareUrl;
+
+    // Open Modal
+    shareModal.classList.add('active');
+
+    // Setup Copy Button
+    copyLinkBtn.onclick = () => {
+        navigator.clipboard.writeText(shareUrl).then(() => {
+            showToast('คัดลอกลิงก์แล้ว', 'check_circle');
+        });
+    };
+
+    // Setup System Share Button
+    systemShareBtn.onclick = async () => {
+        const shareData = {
+            title: track.title,
+            text: `Listen to "${track.title}" by PeephatZ Studio`,
+            url: shareUrl
+        };
+
+        // Try to fetch image blob to share file
+        try {
+            const response = await fetch(coverPath);
+            const blob = await response.blob();
+            const file = new File([blob], 'cover.jpg', { type: 'image/jpeg' });
+
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                shareData.files = [file];
+            }
+        } catch (e) {
+            console.log("Could not fetch image for sharing", e);
         }
-    });
 
-    // Volume
-    volumeBar.addEventListener('input', (e) => {
+        try {
+            await navigator.share(shareData);
+            shareModal.classList.remove('active');
+        } catch (err) {
+            console.log('Error sharing:', err);
+            // Fallback if system share fails (e.g. desktop)
+            navigator.clipboard.writeText(shareUrl);
+            showToast('คัดลอกลิงก์แล้ว (System Share Unavailable)', 'check_circle');
+        }
+    };
+}
+
+function showToast(message, icon = '') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+
+    let iconHtml = '';
+    if (icon) {
+        iconHtml = `<span class="material-icons-round" style="font-size: 18px;">${icon}</span>`;
+    }
+
+    toast.innerHTML = `${iconHtml}<span>${message}</span>`;
+    container.appendChild(toast);
+
+    // Remove after 3s
+    setTimeout(() => {
+        toast.classList.add('hiding');
+        toast.addEventListener('animationend', () => {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        });
+    }, 3000);
+}
+
+
+// FS Volume
+if (fsVolumeBar) {
+    fsVolumeBar.addEventListener('input', (e) => {
         const val = e.target.value / 100;
+        updateRangeBackground(fsVolumeBar);
+        // Sync Mini Volume
+        volumeBar.value = e.target.value;
         updateRangeBackground(volumeBar);
         if (gainNode) gainNode.gain.setValueAtTime(val, audioContext.currentTime);
     });
+}
 
-    // Navigation
-    const handleNav = (target) => {
-        const playlist = target.dataset.playlist;
-        if (currentPlaylist !== playlist) {
-            currentPlaylist = playlist;
-            currentTrackIndex = 0;
-            updateNavState();
-            renderPlaylist(playlist);
-            if (playlists[playlist].length > 0) preloadTrack(0, playlist);
-            renderQueue();
-        }
-    };
+// Mode Switchers
+if (modeAudioBtn) modeAudioBtn.addEventListener('click', () => toggleMode('audio'));
+if (modeVideoBtn) modeVideoBtn.addEventListener('click', () => toggleMode('video'));
 
-    navItems.forEach(item => item.addEventListener('click', () => handleNav(item)));
-    mobileNavBtns.forEach(btn => btn.addEventListener('click', () => handleNav(btn)));
+// Media Controls
+playBtn.addEventListener('click', togglePlay);
+nextBtn.addEventListener('click', nextTrack);
+prevBtn.addEventListener('click', prevTrack);
 
-    // Spacebar to Play
-    document.addEventListener('keydown', (e) => {
-        if (e.code === 'Space' && e.target.tagName !== 'INPUT') {
-            e.preventDefault();
-            togglePlay();
-        }
-    });
+// Video Events
+videoElement.addEventListener('ended', nextTrack);
+videoElement.addEventListener('timeupdate', () => updateProgress(videoElement));
+videoElement.addEventListener('play', () => { isPlaying = true; updatePlayButton(); });
+videoElement.addEventListener('pause', () => { isPlaying = false; updatePlayButton(); });
+videoElement.addEventListener('dblclick', () => {
+    if (videoElement.requestFullscreen) videoElement.requestFullscreen();
+});
 
-    // Infinite Scroll
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent) {
-        mainContent.addEventListener('scroll', () => {
-            if (mainContent.scrollTop + mainContent.clientHeight >= mainContent.scrollHeight - 200) {
-                renderNextBatch(currentPlaylist);
-            }
-        });
+// Seek
+progressBar.addEventListener('input', (e) => {
+    const activeMedia = currentAudioObj || videoElement;
+    updateRangeBackground(progressBar);
+    if (activeMedia && activeMedia.duration) {
+        const time = (e.target.value / 100) * activeMedia.duration;
+        activeMedia.currentTime = time;
     }
+});
 
-    // Re-apply marquee on resize
-    let resizeTimeout;
-    window.addEventListener('resize', () => {
-        clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(() => {
-            applyMarqueeToVisibleTitles();
-            applyFooterTitleMarquee();
-        }, 150);
+// Volume
+volumeBar.addEventListener('input', (e) => {
+    const val = e.target.value / 100;
+    updateRangeBackground(volumeBar);
+    if (gainNode) gainNode.gain.setValueAtTime(val, audioContext.currentTime);
+});
+
+// Navigation
+const handleNav = (target) => {
+    const playlist = target.dataset.playlist;
+    if (currentPlaylist !== playlist) {
+        currentPlaylist = playlist;
+        currentTrackIndex = 0;
+        updateNavState();
+        renderPlaylist(playlist);
+        if (playlists[playlist].length > 0) preloadTrack(0, playlist);
+        renderQueue();
+    }
+};
+
+navItems.forEach(item => item.addEventListener('click', () => handleNav(item)));
+mobileNavBtns.forEach(btn => btn.addEventListener('click', () => handleNav(btn)));
+
+// Spacebar to Play
+document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && e.target.tagName !== 'INPUT') {
+        e.preventDefault();
+        togglePlay();
+    }
+});
+
+// Infinite Scroll
+const mainContent = document.querySelector('.main-content');
+if (mainContent) {
+    mainContent.addEventListener('scroll', () => {
+        if (mainContent.scrollTop + mainContent.clientHeight >= mainContent.scrollHeight - 200) {
+            renderNextBatch(currentPlaylist);
+        }
     });
 }
+
+// Re-apply marquee on resize
+let resizeTimeout;
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+        applyMarqueeToVisibleTitles();
+        applyFooterTitleMarquee();
+    }, 150);
+});
+
 
 // Start
 init();
