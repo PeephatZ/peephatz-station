@@ -390,7 +390,7 @@ body {
     width: 100%;
     max-width: 320px;
     margin-top: 8px;
-    border-top: 1px solid rgba(0,0,0,0.06);
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
     padding-top: 12px;
 }
 
@@ -424,7 +424,7 @@ body {
 
 .queue-shuffle-btn:hover {
     color: var(--text-primary);
-    background: rgba(0,0,0,0.04);
+    background: rgba(0, 0, 0, 0.04);
 }
 
 .queue-shuffle-btn.active {
@@ -587,9 +587,19 @@ video {
 }
 
 @keyframes track-title-marquee {
-    0%, 12% { transform: translateX(0); }
-    88% { transform: translateX(var(--marquee-offset, 0)); }
-    100% { transform: translateX(var(--marquee-offset, 0)); }
+
+    0%,
+    12% {
+        transform: translateX(0);
+    }
+
+    88% {
+        transform: translateX(var(--marquee-offset, 0));
+    }
+
+    100% {
+        transform: translateX(var(--marquee-offset, 0));
+    }
 }
 
 .track-open-control-btn {
@@ -705,9 +715,19 @@ video {
 }
 
 @keyframes footer-title-marquee {
-    0%, 15% { transform: translateX(0); }
-    85% { transform: translateX(var(--marquee-offset, 0)); }
-    100% { transform: translateX(var(--marquee-offset, 0)); }
+
+    0%,
+    15% {
+        transform: translateX(0);
+    }
+
+    85% {
+        transform: translateX(var(--marquee-offset, 0));
+    }
+
+    100% {
+        transform: translateX(var(--marquee-offset, 0));
+    }
 }
 
 .now-playing p {
@@ -837,6 +857,16 @@ input[type="range"]::-webkit-slider-thumb {
 
     .media-container {
         max-width: 100%;
+    }
+
+    /* Fix aspect ratio for cover art on mobile */
+    #full-screen-player .media-container.is-cover {
+        width: auto;
+        height: 100%;
+        /* Was auto, caused collapse if no intrinsic height */
+        max-height: 100%;
+        max-width: 100%;
+        aspect-ratio: 1 / 1;
     }
 
     .mobile-nav {

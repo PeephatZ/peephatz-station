@@ -13,6 +13,11 @@ function getFiles(dir, fileList = []) {
 
     files.forEach(file => {
         const filePath = path.join(dir, file);
+        // Exclude specific file requested by user
+        if (file.includes('Aquanaut Band - คนน่ารัก')) {
+            return;
+        }
+
         if (fs.statSync(filePath).isDirectory()) {
             getFiles(filePath, fileList);
         } else {
@@ -31,7 +36,7 @@ function parseMetadata(filePath) {
     // This allows app.js to simply prepend 'all/' or use the path directly if served from root
     // Current app.js does: const fullPath = 'all/' + track.file;
     // So track.file should be relative to 'all/' folder.
-    const relativePath = path.relative(MEDIA_ROOT, filePath).replace(/\\/g, '/');
+    const relativePath = 'all/' + path.relative(MEDIA_ROOT, filePath).replace(/\\/g, '/');
 
     // Extract Year: Look for [20xx]
     const yearMatch = fileName.match(/\[(\d{4})\]/);
@@ -76,13 +81,30 @@ function generateIndex() {
     // User requested "ไล่ปีใหม่สุดไปเก่าสุดด้วย" (Sort newest to oldest year) broadly.
     bonusTracks.sort((a, b) => b.year - a.year);
 
-    // Sort All: Alphabetical? Or Year? Let's do Year Descending.
-    allTracks.sort((a, b) => b.year - a.year);
+    // Deduplicate All Tracks based on Title
+    const uniqueTracksMap = new Map();
+    allTracks.forEach(track => {
+        // Normalize title for comparison (optional, but good practice)
+        const key = track.title.trim();
+        if (!uniqueTracksMap.has(key)) {
+            uniqueTracksMap.set(key, track);
+        } else {
+            // Optional: If we want to prioritize files from 'Timeline' or 'bonus' over generic 'all' folder
+            // we could check the path here. For now, simple deduplication.
+            const existing = uniqueTracksMap.get(key);
+            // If the new one is in Timeline/Bonus and existing is not, maybe swap? 
+            // Let's stick to simple first found for now unless requested.
+        }
+    });
+    const uniqueAllTracks = Array.from(uniqueTracksMap.values());
+
+    // Sort All: Year Descending
+    uniqueAllTracks.sort((a, b) => b.year - a.year);
 
     const data = {
         timeline: timelineTracks,
         bonus: bonusTracks,
-        all: allTracks
+        all: uniqueAllTracks
     };
 
     fs.writeFileSync(OUTPUT_FILE, JSON.stringify(data, null, 2));
