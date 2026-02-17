@@ -36,7 +36,7 @@ function parseMetadata(filePath) {
 
     // Extract Year: Look for [20xx]
     const yearMatch = fileName.match(/\[(\d{4})\]/);
-    const year = yearMatch ? parseInt(yearMatch[1]) : 0; // Default to 0 if not found
+    let year = yearMatch ? parseInt(yearMatch[1]) : 0; // Default to 0 if not found
 
     // Extract Title: Remove [Year], extension, and common tags
     let title = fileName
@@ -70,7 +70,8 @@ function generateIndex() {
     let allTracks = allFiles.map(parseMetadata);
 
     // Create Timeline Playlist (Filter by path including 'Timeline')
-    const timelineTracks = allTracks.filter(t => t.file.includes('Timeline/'));
+    // Also include 'Refresh' regardless of location/name format (requested for Timeline)
+    const timelineTracks = allTracks.filter(t => t.file.includes('Timeline/') || t.file.includes('Refresh'));
 
     // Create Bonus Playlist (Filter by path including 'bonus')
     const bonusTracks = allTracks.filter(t => t.file.includes('bonus/'));
